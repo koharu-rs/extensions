@@ -24,6 +24,8 @@ use crate::{Catalog, Chapter, ChapterLink, Extension, Listing, Series, SeriesLin
 
 const SITE: &str = "https://read.amazon.co.jp/";
 const TIMEOUT: Duration = Duration::from_secs(30);
+// Kindle serves its reader bootstrap only to a supported desktop browser.
+const READER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36";
 
 pub struct Kindle;
 
@@ -351,6 +353,7 @@ async fn book(http: &Client, url: &Url) -> Result<Book> {
     // Only the reader page needs the browser's session cookies.
     let response = http
         .get(format!("{SITE}manga/{asin}"))
+        .header(reqwest::header::USER_AGENT, READER_AGENT)
         .timeout(TIMEOUT)
         .send()
         .await?;
@@ -416,6 +419,7 @@ async fn library(http: &Client, query: &str, next: Option<&str>) -> Result<Listi
 fn signed_http() -> Result<&'static Client> {
     static HTTP: LazyLock<Result<Client, reqwest::Error>> = LazyLock::new(|| {
         Client::builder()
+            .user_agent(READER_AGENT)
             .redirect(Policy::custom(|attempt| {
                 attempt.error("Kindle request redirected")
             }))
