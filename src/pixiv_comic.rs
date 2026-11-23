@@ -14,7 +14,7 @@ use rand_xoshiro::{
     Xoshiro128StarStar,
     rand_core::{RngCore as _, SeedableRng as _},
 };
-use reqwest::{Client, RequestBuilder, header::REFERER};
+use reqwest::{Client, RequestBuilder, StatusCode, header::REFERER};
 use scraper::{Html, Selector};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::Value;
@@ -50,6 +50,17 @@ struct OfficialWork {
     id: u64,
     name: String,
     image: Images,
+}
+
+/// Who `users/me` says is signed in, as the site's own pages read it.
+#[derive(Deserialize)]
+struct Me {
+    user: Option<User>,
+}
+
+#[derive(Deserialize)]
+struct User {
+    name: String,
 }
 
 /// A page of search results.
@@ -148,6 +159,18 @@ impl Extension for PixivComic {
         Some(
             "https://accounts.pixiv.net/login?source=comic&return_to=https%3A%2F%2Fcomic.pixiv.net%2F",
         )
+    }
+
+    fn account<'a>(&'a self, http: &'a Client) -> BoxFuture<'a, Result<Option<String>>> {
+        Box::pin(async move {
+            let response = api(http, endpoint("users/me")).send().await?;
+            // It refuses a visitor no one signed in as.
+            if response.status() == StatusCode::FORBIDDEN {
+                return Ok(None);
+            }
+            let me: Data<Me> = response.error_for_status()?.json().await?;
+            Ok(me.data.user.map(|user| user.name))
+        })
     }
 
     fn search<'a>(

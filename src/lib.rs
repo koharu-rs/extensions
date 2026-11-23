@@ -39,6 +39,12 @@ pub trait Extension: Send + Sync {
         None
     }
 
+    /// The name of the account signed in to its site, `None` when no one
+    /// is, as a site without a sign-in always answers.
+    fn account<'a>(&'a self, _http: &'a Client) -> BoxFuture<'a, Result<Option<String>>> {
+        Box::pin(async { Ok(None) })
+    }
+
     /// The page of its search for `query` that `next` starts, the first
     /// when it's `None`.
     fn search<'a>(
