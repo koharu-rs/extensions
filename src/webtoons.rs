@@ -147,6 +147,7 @@ impl Extension for Webtoons {
                 title: meta(&page, "og:title").context("the episode's page has no title")?,
                 series: None,
                 direction: Some(ReadingDirection::Vertical),
+                first_page: None,
                 pages: page
                     .select(&images)
                     .filter_map(|image| image.attr("data-url"))

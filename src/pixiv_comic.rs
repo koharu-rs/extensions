@@ -22,8 +22,8 @@ use sha2::{Digest as _, Sha256};
 use url::Url;
 
 use crate::{
-    Catalog, Chapter, ChapterLink, Extension, Listing, ReadingDirection, Series, SeriesLink, page,
-    text,
+    Catalog, Chapter, ChapterLink, Extension, Listing, PageSide, ReadingDirection, Series,
+    SeriesLink, page, text,
 };
 
 const SITE: &str = "https://comic.pixiv.net/";
@@ -116,6 +116,8 @@ struct Reading {
     numbering_title: String,
     sub_title: String,
     is_tateyomi: bool,
+    /// The side its viewer's spreads put the first page on.
+    two_page_layout: Option<String>,
     pages: Vec<Page>,
 }
 
@@ -289,6 +291,11 @@ impl Extension for PixivComic {
                 } else {
                     ReadingDirection::Rtl
                 }),
+                first_page: match episode.two_page_layout.as_deref() {
+                    Some("left") => Some(PageSide::Left),
+                    Some("right") => Some(PageSide::Right),
+                    _ => None,
+                },
                 pages: episode
                     .pages
                     .iter()

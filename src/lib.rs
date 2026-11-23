@@ -132,7 +132,19 @@ pub struct Chapter {
     /// The series' title, which names the chapter's project.
     pub series: Option<String>,
     pub direction: Option<ReadingDirection>,
+    /// Which side of a two-page spread its first page takes, as EPUB's
+    /// `page-spread-left` and `page-spread-right` place a page; `None` when
+    /// the site doesn't say.
+    pub first_page: Option<PageSide>,
     pub pages: Vec<String>,
+}
+
+/// A side of a two-page spread.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "lowercase")]
+pub enum PageSide {
+    Left,
+    Right,
 }
 
 /// How a chapter's pages turn.
