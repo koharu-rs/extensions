@@ -15,11 +15,11 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-/// Every extension.
+/// Every extension, in the order Koharu lists them.
 pub static EXTENSIONS: &[&dyn Extension] = &[
     &kindle::Kindle,
+    &pixiv_comic::PixivComic,
     &comic_walker::ComicWalker,
-    &naver_webtoon::NaverWebtoon,
     &gigaviewer::SHONEN_JUMP_PLUS,
     &gigaviewer::TONARI_NO_YOUNG_JUMP,
     &gigaviewer::COMIC_DAYS,
@@ -31,8 +31,8 @@ pub static EXTENSIONS: &[&dyn Extension] = &[
     &gigaviewer::COMIC_GARDO,
     &gigaviewer::COMIC_EARTH_STAR,
     &gigaviewer::COMIC_TRAIL,
-    &pixiv_comic::PixivComic,
     &webtoons::Webtoons,
+    &naver_webtoon::NaverWebtoon,
 ];
 
 /// The extension that reads `url`.
