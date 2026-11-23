@@ -115,6 +115,10 @@ impl Extension for ComicWalker {
         "カドコミ"
     }
 
+    fn sign_in(&self) -> Option<&'static str> {
+        Some("https://comic-walker.com/auth/signin?callbackUrl=https%3A%2F%2Fcomic-walker.com%2F")
+    }
+
     fn reads(&self, url: &Url) -> bool {
         url.scheme() == "https" && url.host_str() == Some("comic-walker.com")
     }

@@ -111,6 +111,12 @@ impl Extension for GigaViewer {
         self.name
     }
 
+    /// Its front page, whose header opens the site's sign-in and sign-up
+    /// dialog; it has no page of its own for them.
+    fn sign_in(&self) -> Option<&'static str> {
+        Some(self.site)
+    }
+
     fn reads(&self, url: &Url) -> bool {
         url.scheme() == "https"
             && Url::parse(self.site).is_ok_and(|site| url.host_str() == site.host_str())
