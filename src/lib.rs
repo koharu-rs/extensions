@@ -140,7 +140,7 @@ pub struct Chapter {
 }
 
 /// A side of a two-page spread.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, specta::Type)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize, specta::Type)]
 #[serde(rename_all = "lowercase")]
 pub enum PageSide {
     Left,
@@ -148,7 +148,7 @@ pub enum PageSide {
 }
 
 /// How a chapter's pages turn.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, specta::Type)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize, specta::Type)]
 #[serde(rename_all = "lowercase")]
 pub enum ReadingDirection {
     /// Right to left, as Japanese manga turns.
