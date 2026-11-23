@@ -152,25 +152,25 @@ impl Extension for ComicWalker {
         next: Option<&'a str>,
     ) -> BoxFuture<'a, Result<Listing>> {
         Box::pin(async move {
-            match catalog {
-                Catalog::Popular => {
-                    let offset = offset(next)?;
-                    let mut url = endpoint("ranking");
-                    url.query_pairs_mut()
-                        .append_pair("limit", &LIMIT.to_string())
-                        .append_pair("offset", &offset.to_string());
-                    let ranking: Ranking = api(http, url).await?;
-                    Ok(listing(ranking.result, offset, ranking.total))
-                }
-                Catalog::Latest => {
-                    let daily: Daily = api(http, endpoint("daily/new")).await?;
-                    let works = daily.resources.into_iter().next().map(|day| day.works);
-                    Ok(Listing {
-                        series: works.unwrap_or_default().into_iter().map(link).collect(),
-                        next: None,
-                    })
-                }
+            if catalog == Catalog::Popular {
+                let offset = offset(next)?;
+                let mut url = endpoint("ranking");
+                url.query_pairs_mut()
+                    .append_pair("limit", &LIMIT.to_string())
+                    .append_pair("offset", &offset.to_string());
+                let ranking: Ranking = api(http, url).await?;
+                return Ok(listing(ranking.result, offset, ranking.total));
             }
+            if catalog != Catalog::Latest {
+                bail!("カドコミ has no {catalog:?} catalog");
+            }
+            // The first day's are today's.
+            let daily: Daily = api(http, endpoint("daily/new")).await?;
+            let works = daily.resources.into_iter().next().map(|day| day.works);
+            Ok(Listing {
+                series: works.unwrap_or_default().into_iter().map(link).collect(),
+                next: None,
+            })
         })
     }
 
