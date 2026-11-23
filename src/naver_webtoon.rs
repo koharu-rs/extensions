@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use anyhow::{Context as _, Result, bail};
 use chrono::{Datelike as _, FixedOffset, Utc, Weekday};
 use futures::future::BoxFuture;
-use reqwest::{Client, header::REFERER};
+use reqwest::{Client, StatusCode, header::REFERER};
 use scraper::{Html, Selector};
 use serde::{Deserialize, de::DeserializeOwned};
 use url::Url;
@@ -223,13 +223,12 @@ fn endpoint(path: &str) -> Url {
 }
 
 async fn api<T: DeserializeOwned>(http: &Client, url: Url) -> Result<T> {
-    Ok(http
-        .get(url)
-        .send()
-        .await?
-        .error_for_status()?
-        .json()
-        .await?)
+    let response = http.get(url).send().await?;
+    // It refuses an adult series to a visitor no one signed in as.
+    if response.status() == StatusCode::UNAUTHORIZED {
+        bail!("Naver Webtoon asks you to sign in for this series");
+    }
+    Ok(response.error_for_status()?.json().await?)
 }
 
 /// The page after `info`'s, when there's one.
