@@ -3,7 +3,7 @@
 //! reply, an episode's pages, also wants each request signed as the viewer
 //! signs it, and the pages come shuffled on a grid, which `unshuffle` puts
 //! back as the viewer does. Both follow the viewer's code as read on
-//! 2026-11-23; that Koharu ships them is the risk its owner accepted.
+//! 2026-11-23.
 
 use std::io::Cursor;
 

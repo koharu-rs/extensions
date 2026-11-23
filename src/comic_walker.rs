@@ -1,8 +1,7 @@
 //! KADOKAWA's カドコミ (コミックウォーカー), through the API its own pages
 //! read: its search, ranking, and day's updates, a series' episodes, and an
 //! episode's pages, each XORed with the key its viewer reply gives, which
-//! `page` undoes as the viewer does. That Koharu ships it is the risk its
-//! owner accepted, as with pixiv Comic's.
+//! `page` undoes as the viewer does.
 
 use anyhow::{Context as _, Result, bail, ensure};
 use futures::future::BoxFuture;

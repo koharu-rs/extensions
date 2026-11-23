@@ -2,9 +2,8 @@
 //! publishers run: an episode's data from the JSON its page carries, a
 //! series' episodes from the list its viewer pages through, and pages,
 //! shuffled on a grid, put back as the viewer's puzzle solver does. That
-//! follows the viewer's code as read on 2026-11-23; that Koharu ships it is
-//! the risk its owner accepted, as with pixiv Comic's. Each site keeps its
-//! own search and series list pages, whose markup here is Shōnen Jump+'s.
+//! follows the viewer's code as read on 2026-11-23. Each site keeps its own
+//! search and series list pages, whose markup here is Shōnen Jump+'s.
 
 use std::io::Cursor;
 
