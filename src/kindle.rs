@@ -1,4 +1,3 @@
-// SPDX-License-Identifier: GPL-3.0-only
 // Adapted from Koharu's scripts/kinde.ts, itself adapted from Azxiana's
 // https://github.com/Alexia/kandle-downloader/blob/71f7e5346eddcc031a6899c091f13a2d80ba73fd/kandle-downloader.js
 //! Kindle JP's manga reader. Each ASIN is one volume and one chapter.
