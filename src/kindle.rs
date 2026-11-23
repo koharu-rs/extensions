@@ -89,7 +89,9 @@ struct Resource {
 }
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct RenderedPage {
+    end_position_id: u64,
     children: Vec<Element>,
 }
 
@@ -228,19 +230,18 @@ impl Extension for Kindle {
         Box::pin(async move {
             let book = book(http, url).await?;
             let initial = render(&book, 0, true).await?;
-            let locations = initial
+            let mut locations = initial
                 .locations
-                .as_ref()
-                .context("Kindle render has no location map")?;
-            let mut positions = HashSet::new();
+                .as_deref()
+                .context("Kindle render has no location map")?
+                .iter()
+                .copied();
+            let mut next = locations.next();
             let mut seen = HashSet::new();
             let mut pages = Vec::new();
-            // Locations overlap and a spread can contain multiple images.
-            // Keep the first occurrence of each element in source order.
-            for &position in locations {
-                if !positions.insert(position) {
-                    continue;
-                }
+            // Locations can land inside the same spread. Advance by the range
+            // Kindle actually rendered, keeping images in their first-seen order.
+            while let Some(position) = next {
                 let subsequent;
                 let rendered = if position == 0 {
                     &initial
@@ -248,6 +249,11 @@ impl Extension for Kindle {
                     subsequent = render(&book, position, false).await?;
                     &subsequent
                 };
+                let end = rendered
+                    .pages
+                    .last()
+                    .map_or(position, |page| page.end_position_id);
+                next = locations.find(|location| !(position..=end).contains(location));
                 let Manifest { cdn, cdn_resources } = &rendered.manifest;
                 for element in rendered.pages.iter().flat_map(|page| &page.children) {
                     let Some(reference) = &element.image_reference else {
@@ -455,7 +461,7 @@ async fn render(book: &Book, position: u64, location_map: bool) -> Result<Render
         ("theme", "dark"),
         ("packageType", "TAR"),
         ("encryptionVersion", "NONE"),
-        ("numPage", "1"),
+        ("numPage", "5"),
         ("skipPageCount", "0"),
         ("startingPosition", &position.to_string()),
         ("bundleImages", "false"),
