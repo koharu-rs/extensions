@@ -184,7 +184,7 @@ impl Extension for Kindle {
                 series: vec![SeriesLink {
                     title: book.title,
                     url: format!("{SITE}manga/{}", book.asin),
-                    cover: None,
+                    cover: Some(cover(&book.asin)),
                 }],
                 next: None,
             })
@@ -219,7 +219,7 @@ impl Extension for Kindle {
                     locked: false,
                 }],
                 title: book.title,
-                cover: None,
+                cover: Some(cover(&book.asin)),
             })
         })
     }
@@ -374,6 +374,10 @@ fn is_asin(asin: &str) -> bool {
         && asin
             .bytes()
             .all(|byte| byte.is_ascii_uppercase() || byte.is_ascii_digit())
+}
+
+fn cover(asin: &str) -> String {
+    format!("https://m.media-amazon.com/images/P/{asin}.09.L.jpg")
 }
 
 async fn library(http: &Client, query: &str, next: Option<&str>) -> Result<Listing> {
