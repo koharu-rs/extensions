@@ -161,6 +161,9 @@ struct Page {
     shuffled: bool,
 }
 
+/// A thumbnail template's size when its image doesn't give one.
+const THUMBNAIL: &str = "528";
+
 /// How many episodes the viewer's list gives at once.
 const PER_PAGE: usize = 50;
 
@@ -448,16 +451,23 @@ fn cards(page: &Html) -> Vec<SeriesLink> {
 
 /// A card's cover: its thumbnail's lazy or plain source, past spacers and
 /// inline placeholders, or else the first source of the copy a Next.js page
-/// keeps in `<noscript>`, which the parser leaves as text.
+/// keeps in `<noscript>`, which the parser leaves as text. A source may be a
+/// template whose `{width}` and `{height}` the page's script fills with the
+/// image's size; left unfilled, the image server answers with a sliver of
+/// its average color.
 fn cover(card: ElementRef<'_>, thumbnail: Option<ElementRef<'_>>) -> Option<String> {
     let real = |src: &&str| src.starts_with("https://") && !src.contains("spacer");
-    if let Some(src) = thumbnail.and_then(|image| {
-        [image.attr("data-src"), image.attr("src")]
+    if let Some(image) = thumbnail
+        && let Some(src) = [image.attr("data-src"), image.attr("src")]
             .into_iter()
             .flatten()
             .find(real)
-    }) {
-        return Some(src.to_owned());
+    {
+        let size = |name| image.attr(name).unwrap_or(THUMBNAIL);
+        return Some(
+            src.replace("{width}", size("width"))
+                .replace("{height}", size("height")),
+        );
     }
     let html = card.html();
     let (_, sources) = html

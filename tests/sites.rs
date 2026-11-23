@@ -1,6 +1,7 @@
 //! Every site that reads without an account, read as Koharu reads it: its
-//! catalogs and a search, then a series with a free chapter, that chapter,
-//! and its first page, which must be an image. Sites change their pages
+//! catalogs and a search, each with a cover that's a picture, then a series
+//! with a free chapter, that chapter, and its first page, which must be an
+//! image. Sites change their pages
 //! without notice, so this runs against them, not recordings; it's ignored
 //! unless asked for, and saves each page it read under the target directory.
 
@@ -8,7 +9,7 @@ use std::path::Path;
 
 use anyhow::{Context as _, Result, ensure};
 use futures::future::join_all;
-use koharu_extensions::{EXTENSIONS, Extension};
+use koharu_extensions::{EXTENSIONS, Extension, SeriesLink};
 use url::Url;
 
 /// Each site, by its extension's id, and a search that finds series there.
@@ -32,6 +33,9 @@ const SITES: &[(&str, &str)] = &[
 
 /// How many of a site's series to try for one with a free chapter.
 const TRIES: usize = 8;
+/// The narrowest a cover is: an image server answers a malformed request
+/// with a sliver of the cover's average color, which still decodes.
+const COVER: u32 = 64;
 
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "reads every site over the network"]
@@ -77,6 +81,7 @@ async fn read(http: &reqwest::Client, id: &str, query: &str, pages: &Path) -> Re
     let mut series = Vec::new();
     let found = site.search(http, query, None).await.context("search")?;
     ensure!(!found.series.is_empty(), "searching {query} found nothing");
+    cover(http, site, &found.series).await.context("search")?;
     said.push(format!("search {}", found.series.len()));
     series.extend(found.series);
     for &catalog in site.catalogs() {
@@ -85,6 +90,9 @@ async fn read(http: &reqwest::Client, id: &str, query: &str, pages: &Path) -> Re
             .await
             .with_context(|| format!("catalog {catalog:?}"))?;
         ensure!(!listing.series.is_empty(), "catalog {catalog:?} is empty");
+        cover(http, site, &listing.series)
+            .await
+            .with_context(|| format!("catalog {catalog:?}"))?;
         said.push(format!("{catalog:?} {}", listing.series.len()));
         series.extend(listing.series);
     }
@@ -118,4 +126,19 @@ async fn read(http: &reqwest::Client, id: &str, query: &str, pages: &Path) -> Re
         read.direction
     ));
     Ok(said.join(", "))
+}
+
+/// That the first of `series` with a cover has one that's a picture.
+async fn cover(http: &reqwest::Client, site: &dyn Extension, series: &[SeriesLink]) -> Result<()> {
+    let Some(url) = series.iter().find_map(|link| link.cover.as_deref()) else {
+        return Ok(());
+    };
+    let bytes = site.cover(http, &Url::parse(url)?).await.context("cover")?;
+    let cover = image::load_from_memory(&bytes).context("the cover doesn't decode")?;
+    ensure!(
+        cover.width() >= COVER,
+        "the cover is {} pixels wide: {url}",
+        cover.width()
+    );
+    Ok(())
 }
