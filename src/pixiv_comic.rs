@@ -1,5 +1,5 @@
-//! pixiv Comic's episodes, through the API its own pages read, which
-//! answers only requests that say they come from the site. Its viewer's
+//! pixiv Comic's works and episodes, through the API its own pages read,
+//! which answers only requests that say they come from the site. Its viewer's
 //! reply, an episode's pages, also wants each request signed as the viewer
 //! signs it, and the pages come shuffled on a grid, which `unshuffle` puts
 //! back as the viewer does. Both follow the viewer's code as read on
@@ -21,9 +21,14 @@ use serde_json::Value;
 use sha2::{Digest as _, Sha256};
 use url::Url;
 
-use crate::{Chapter, ChapterLink, Extension, ReadingDirection, Series, text};
+use crate::{
+    Catalog, Chapter, ChapterLink, Extension, Listing, ReadingDirection, Series, SeriesLink, page,
+    text,
+};
 
 const SITE: &str = "https://comic.pixiv.net/";
+/// The ranking its popular catalog is: the overall one.
+const RANKING: &str = "総合";
 /// What the viewer hashes before a page's key to seed its shuffle.
 const SEED: &str = "4wXCKprMMoxnyJ3PocJFs4CYbfnbazNe";
 
@@ -42,8 +47,38 @@ struct Work {
 
 #[derive(Deserialize)]
 struct OfficialWork {
+    id: u64,
     name: String,
     image: Images,
+}
+
+/// A page of search results.
+#[derive(Deserialize)]
+struct Found {
+    official_works: Vec<OfficialWork>,
+    /// The next page's address, which only says whether there is one.
+    next_url: Option<String>,
+}
+
+/// A page of recently updated works.
+#[derive(Deserialize)]
+struct Updated {
+    official_works: Vec<OfficialWork>,
+    next_page_number: Option<u32>,
+}
+
+/// The popularity ranking, in one page.
+#[derive(Deserialize)]
+struct Ranking {
+    ranking: Vec<Ranked>,
+}
+
+#[derive(Deserialize)]
+struct Ranked {
+    id: u64,
+    title: String,
+    /// The cover; its `thumbnail_image_url` answers 404.
+    main_image_url: String,
 }
 
 #[derive(Deserialize)]
@@ -113,15 +148,82 @@ impl Extension for PixivComic {
         )
     }
 
+    fn search<'a>(
+        &'a self,
+        http: &'a Client,
+        query: &'a str,
+        next: Option<&'a str>,
+    ) -> BoxFuture<'a, Result<Listing>> {
+        Box::pin(async move {
+            let page = page(next)?;
+            let mut url = endpoint("works/search/v2");
+            url.path_segments_mut()
+                .expect("an https address has a path")
+                .push(query);
+            url.query_pairs_mut().append_pair("page", &page.to_string());
+            let found: Found = answer(api(http, url)).await?;
+            Ok(Listing {
+                series: found.official_works.into_iter().map(link).collect(),
+                next: found.next_url.map(|_| (page + 1).to_string()),
+            })
+        })
+    }
+
+    fn catalogs(&self) -> &'static [Catalog] {
+        &[Catalog::Popular, Catalog::Latest]
+    }
+
+    fn catalog<'a>(
+        &'a self,
+        http: &'a Client,
+        catalog: Catalog,
+        next: Option<&'a str>,
+    ) -> BoxFuture<'a, Result<Listing>> {
+        Box::pin(async move {
+            match catalog {
+                Catalog::Popular => {
+                    let mut url = endpoint("rankings/popularity");
+                    url.query_pairs_mut()
+                        .append_pair("label", RANKING)
+                        .append_pair("count", "30");
+                    let ranking: Ranking = answer(api(http, url)).await?;
+                    let series = ranking
+                        .ranking
+                        .into_iter()
+                        .map(|ranked| SeriesLink {
+                            title: ranked.title,
+                            url: format!("{SITE}works/{}", ranked.id),
+                            cover: Some(ranked.main_image_url),
+                        })
+                        .collect();
+                    Ok(Listing { series, next: None })
+                }
+                Catalog::Latest => {
+                    let mut url = endpoint("works/recent_updates/v2");
+                    url.query_pairs_mut()
+                        .append_pair("page", &page(next)?.to_string());
+                    let updated: Updated = answer(api(http, url)).await?;
+                    Ok(Listing {
+                        series: updated.official_works.into_iter().map(link).collect(),
+                        next: updated.next_page_number.map(|page| page.to_string()),
+                    })
+                }
+            }
+        })
+    }
+
     fn series<'a>(&'a self, http: &'a Client, url: &'a Url) -> BoxFuture<'a, Result<Series>> {
         Box::pin(async move {
             let id = url
                 .path()
                 .strip_prefix("/works/")
                 .with_context(|| format!("{url} isn't a work"))?;
-            let work: Work = answer(api(http, &format!("works/v5/{id}"))).await?;
-            let episodes: Episodes =
-                answer(api(http, &format!("works/{id}/episodes/v2?order=asc"))).await?;
+            let work: Work = answer(api(http, endpoint(&format!("works/v5/{id}")))).await?;
+            let episodes: Episodes = answer(api(
+                http,
+                endpoint(&format!("works/{id}/episodes/v2?order=asc")),
+            ))
+            .await?;
             let chapters = episodes
                 .episodes
                 .into_iter()
@@ -173,7 +275,7 @@ impl Extension for PixivComic {
                 .map(|byte| format!("{byte:02x}"))
                 .collect();
             let read: Read = answer(
-                api(http, &format!("episodes/{id}/read_v4"))
+                api(http, endpoint(&format!("episodes/{id}/read_v4")))
                     .header("X-Client-Time", time)
                     .header("X-Client-Hash", hash),
             )
@@ -219,9 +321,22 @@ impl Extension for PixivComic {
 }
 
 /// A request to the site's API, said to come from the site.
-fn api(http: &Client, path: &str) -> RequestBuilder {
-    http.get(format!("{SITE}api/app/{path}"))
-        .header("X-Requested-With", "pixivcomic")
+fn api(http: &Client, url: Url) -> RequestBuilder {
+    http.get(url).header("X-Requested-With", "pixivcomic")
+}
+
+/// The address of the API's `path`.
+fn endpoint(path: &str) -> Url {
+    Url::parse(&format!("{SITE}api/app/{path}")).expect("an address on the site")
+}
+
+/// A work as a list shows it.
+fn link(work: OfficialWork) -> SeriesLink {
+    SeriesLink {
+        title: work.name,
+        url: format!("{SITE}works/{}", work.id),
+        cover: Some(work.image.main),
+    }
 }
 
 async fn answer<T: DeserializeOwned>(request: RequestBuilder) -> Result<T> {

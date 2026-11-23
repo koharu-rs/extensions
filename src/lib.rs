@@ -1,6 +1,6 @@
-//! The sites Koharu reads: each an [`Extension`] that says what a series'
-//! chapters and a chapter's pages are on its site. Koharu builds every one
-//! in.
+//! The sites Koharu reads: each an [`Extension`] that searches its site,
+//! lists its catalogs, and says what a series' chapters and a chapter's
+//! pages are there. Koharu builds every one in.
 
 mod pixiv_comic;
 mod webtoons;
@@ -8,7 +8,7 @@ mod webtoons;
 use anyhow::Result;
 use futures::future::BoxFuture;
 use reqwest::Client;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use url::Url;
 
 /// Every extension.
@@ -39,6 +39,27 @@ pub trait Extension: Send + Sync {
         None
     }
 
+    /// The page of its search for `query` that `next` starts, the first
+    /// when it's `None`.
+    fn search<'a>(
+        &'a self,
+        http: &'a Client,
+        query: &'a str,
+        next: Option<&'a str>,
+    ) -> BoxFuture<'a, Result<Listing>>;
+
+    /// The lists it has besides its search.
+    fn catalogs(&self) -> &'static [Catalog];
+
+    /// The page of one of its `catalogs` that `next` starts, the first when
+    /// it's `None`.
+    fn catalog<'a>(
+        &'a self,
+        http: &'a Client,
+        catalog: Catalog,
+        next: Option<&'a str>,
+    ) -> BoxFuture<'a, Result<Listing>>;
+
     fn series<'a>(&'a self, http: &'a Client, url: &'a Url) -> BoxFuture<'a, Result<Series>>;
 
     fn chapter<'a>(&'a self, http: &'a Client, url: &'a Url) -> BoxFuture<'a, Result<Chapter>>;
@@ -53,6 +74,36 @@ pub trait Extension: Send + Sync {
             Ok(response.bytes().await?.to_vec())
         })
     }
+}
+
+/// A list a site has besides its search, as Mihon's catalogue sources have
+/// popular and latest.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize, specta::Type)]
+#[serde(rename_all = "lowercase")]
+pub enum Catalog {
+    Popular,
+    /// Recently updated.
+    Latest,
+}
+
+/// One page of a search or a catalog.
+#[derive(Clone, Debug, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct Listing {
+    pub series: Vec<SeriesLink>,
+    /// Where the next page starts, as only its extension reads it; `None`
+    /// on the last.
+    pub next: Option<String>,
+}
+
+/// A series as a list shows it.
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize, specta::Type)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct SeriesLink {
+    pub title: String,
+    pub url: String,
+    #[serde(default)]
+    pub cover: Option<String>,
 }
 
 /// A series: its chapters in reading order.
@@ -104,4 +155,9 @@ async fn text(http: &Client, url: &Url) -> Result<String> {
         .error_for_status()?
         .text()
         .await?)
+}
+
+/// The page number `next` holds, 1 when it's `None`.
+fn page(next: Option<&str>) -> Result<u32> {
+    Ok(next.map(str::parse).transpose()?.unwrap_or(1))
 }
