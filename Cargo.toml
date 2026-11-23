@@ -3,15 +3,18 @@ name = "koharu-extensions"
 version = "0.1.0"
 edition = "2024"
 description = "The sites Koharu reads"
-license = "MIT OR Apache-2.0"
+license = "(MIT OR Apache-2.0) AND GPL-3.0-only"
 repository = "https://github.com/koharu-rs/extensions"
 publish = false
 
 [dependencies]
+aes-gcm = "0.11"
 anyhow = "1"
+base64 = "0.22"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 futures = "0.3"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
+pbkdf2 = { version = "0.13", default-features = false, features = ["hmac"] }
 rand_xoshiro = "0.7"
 reqwest = { version = "0.13", features = ["json"] }
 scraper = "0.29"
@@ -20,4 +23,5 @@ serde_json = "1"
 sha2 = "0.11"
 # Koharu's own, as its interface shows these types.
 specta = { version = "2.0.0-rc.28", features = ["derive"] }
+tar = "0.4"
 url = "2"

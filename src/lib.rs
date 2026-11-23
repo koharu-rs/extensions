@@ -2,6 +2,7 @@
 //! lists its catalogs, and says what a series' chapters and a chapter's
 //! pages are there. Koharu builds every one in.
 
+mod kindle;
 mod pixiv_comic;
 mod webtoons;
 
@@ -12,7 +13,11 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 
 /// Every extension.
-pub static EXTENSIONS: &[&dyn Extension] = &[&pixiv_comic::PixivComic, &webtoons::Webtoons];
+pub static EXTENSIONS: &[&dyn Extension] = &[
+    &kindle::Kindle,
+    &pixiv_comic::PixivComic,
+    &webtoons::Webtoons,
+];
 
 /// The extension that reads `url`.
 #[must_use]
@@ -23,8 +28,9 @@ pub fn find(url: &Url) -> Option<&'static dyn Extension> {
         .find(|extension| extension.reads(url))
 }
 
-/// A site Koharu reads. Its requests go through `http`, which sends the
-/// cookies of the user's sign-in to the site.
+/// A site Koharu reads. `http` sends the cookies of the user's sign-in.
+/// An extension can use a separate client for signed requests that must
+/// reject redirects and carry no browser cookies.
 pub trait Extension: Send + Sync {
     /// Its module's name, which keys it.
     fn id(&self) -> &'static str;
