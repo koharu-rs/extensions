@@ -2,6 +2,9 @@
 //! lists its catalogs, and says what a series' chapters and a chapter's
 //! pages are there. Koharu builds every one in.
 
+mod comic_walker;
+mod gigaviewer;
+mod naver_webtoon;
 mod pixiv_comic;
 mod webtoons;
 
@@ -12,7 +15,13 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 
 /// Every extension.
-pub static EXTENSIONS: &[&dyn Extension] = &[&pixiv_comic::PixivComic, &webtoons::Webtoons];
+pub static EXTENSIONS: &[&dyn Extension] = &[
+    &comic_walker::ComicWalker,
+    &naver_webtoon::NaverWebtoon,
+    &gigaviewer::SHONEN_JUMP_PLUS,
+    &pixiv_comic::PixivComic,
+    &webtoons::Webtoons,
+];
 
 /// The extension that reads `url`.
 #[must_use]

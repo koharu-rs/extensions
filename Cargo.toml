@@ -11,6 +11,7 @@ publish = false
 anyhow = "1"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 futures = "0.3"
+hex = "0.4"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
 rand_xoshiro = "0.7"
 reqwest = { version = "0.13", features = ["json"] }
