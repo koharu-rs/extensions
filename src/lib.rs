@@ -2,7 +2,10 @@
 //! lists its catalogs, and says what a series' chapters and a chapter's
 //! pages are there. Koharu builds every one in.
 
+mod comic_walker;
+mod gigaviewer;
 mod kindle;
+mod naver_webtoon;
 mod pixiv_comic;
 mod webtoons;
 
@@ -15,6 +18,9 @@ use url::Url;
 /// Every extension.
 pub static EXTENSIONS: &[&dyn Extension] = &[
     &kindle::Kindle,
+    &comic_walker::ComicWalker,
+    &naver_webtoon::NaverWebtoon,
+    &gigaviewer::SHONEN_JUMP_PLUS,
     &pixiv_comic::PixivComic,
     &webtoons::Webtoons,
 ];

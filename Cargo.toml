@@ -13,6 +13,7 @@ anyhow = "1"
 base64 = "0.22"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 futures = "0.3"
+hex = "0.4"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
 json5 = "1"
 pbkdf2 = { version = "0.13", default-features = false, features = ["hmac"] }
