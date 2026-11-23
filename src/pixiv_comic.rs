@@ -7,7 +7,7 @@
 
 use std::io::Cursor;
 
-use anyhow::{Context as _, Result};
+use anyhow::{Context as _, Result, bail};
 use futures::future::BoxFuture;
 use image::{ImageFormat, RgbaImage};
 use rand_xoshiro::{
@@ -206,6 +206,7 @@ impl Extension for PixivComic {
     ) -> BoxFuture<'a, Result<Listing>> {
         Box::pin(async move {
             match catalog {
+                Catalog::Library => bail!("pixiv Comic has no library catalog"),
                 Catalog::Popular => {
                     let mut url = endpoint("rankings/popularity");
                     url.query_pairs_mut()

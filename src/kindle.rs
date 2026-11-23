@@ -29,6 +29,21 @@ pub struct Kindle;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct Library {
+    items_list: Vec<LibraryBook>,
+    pagination_token: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LibraryBook {
+    asin: String,
+    title: String,
+    product_url: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct Book {
     asin: String,
     title: String,
@@ -107,14 +122,51 @@ impl Extension for Kindle {
         Some(SITE)
     }
 
+    fn account<'a>(&'a self, http: &'a Client) -> BoxFuture<'a, Result<Option<String>>> {
+        Box::pin(async move {
+            let response = http
+                .get(format!(
+                    "{SITE}kindle-library/search?libraryType=MANGA&querySize=1&sortType=recency"
+                ))
+                .send()
+                .await?
+                .error_for_status()?;
+            if !self.reads(response.url()) || response.url().path() != "/kindle-library/search" {
+                return Ok(None);
+            }
+            let _: Library = response.json().await?;
+            // Kindle's library doesn't carry the account name. Amazon's navbar
+            // configuration has the full name; its visible label is shortened.
+            let page = http
+                .get("https://www.amazon.co.jp/")
+                .send()
+                .await?
+                .error_for_status()?
+                .text()
+                .await?;
+            let name = page
+                .lines()
+                .find_map(|line| {
+                    line.trim()
+                        .strip_prefix("window.$Nav && $Nav.declare('config.customerName',")?
+                        .strip_suffix(");")
+                })
+                .context("Amazon's page has no account name")?;
+            Ok(Some(json5::from_str(name)?))
+        })
+    }
+
     fn search<'a>(
         &'a self,
         http: &'a Client,
         query: &'a str,
-        _next: Option<&'a str>,
+        next: Option<&'a str>,
     ) -> BoxFuture<'a, Result<Listing>> {
         Box::pin(async move {
             let query = query.trim();
+            if !query.starts_with("https://") && !is_asin(query) {
+                return library(http, query, next).await;
+            }
             let url = if query.starts_with("https://") {
                 Url::parse(query)?
             } else {
@@ -138,16 +190,21 @@ impl Extension for Kindle {
     }
 
     fn catalogs(&self) -> &'static [Catalog] {
-        &[]
+        &[Catalog::Library]
     }
 
     fn catalog<'a>(
         &'a self,
-        _http: &'a Client,
-        _catalog: Catalog,
-        _next: Option<&'a str>,
+        http: &'a Client,
+        catalog: Catalog,
+        next: Option<&'a str>,
     ) -> BoxFuture<'a, Result<Listing>> {
-        Box::pin(async { bail!("Kindle JP has no public catalogs") })
+        Box::pin(async move {
+            match catalog {
+                Catalog::Library => library(http, "", next).await,
+                Catalog::Popular | Catalog::Latest => bail!("Kindle JP has no public catalogs"),
+            }
+        })
     }
 
     fn series<'a>(&'a self, http: &'a Client, url: &'a Url) -> BoxFuture<'a, Result<Series>> {
@@ -289,12 +346,7 @@ async fn book(http: &Client, url: &Url) -> Result<Book> {
     let asin = url
         .path()
         .strip_prefix("/manga/")
-        .filter(|asin| {
-            asin.len() == 10
-                && asin
-                    .bytes()
-                    .all(|byte| byte.is_ascii_uppercase() || byte.is_ascii_digit())
-        })
+        .filter(|asin| is_asin(asin))
         .context("Use a Kindle JP manga reader URL")?;
     // Only the reader page needs the browser's session cookies.
     let response = http
@@ -312,6 +364,51 @@ async fn book(http: &Client, url: &Url) -> Result<Book> {
         .text()
         .collect::<String>();
     serde_json::from_str(&data).context("Invalid Kindle bookInfo")
+}
+
+fn is_asin(asin: &str) -> bool {
+    asin.len() == 10
+        && asin
+            .bytes()
+            .all(|byte| byte.is_ascii_uppercase() || byte.is_ascii_digit())
+}
+
+async fn library(http: &Client, query: &str, next: Option<&str>) -> Result<Listing> {
+    let mut next = next.map(str::to_owned);
+    loop {
+        let mut url = Url::parse(SITE)?.join("kindle-library/search")?;
+        url.query_pairs_mut().extend_pairs([
+            ("libraryType", "MANGA"),
+            ("sortType", "recency"),
+            ("querySize", "50"),
+            ("query", query),
+        ]);
+        if let Some(next) = &next {
+            url.query_pairs_mut().append_pair("paginationToken", next);
+        }
+        let library: Library = http
+            .get(url)
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?;
+        next = library.pagination_token.filter(|token| !token.is_empty());
+        let series = library
+            .items_list
+            .into_iter()
+            .map(|book| SeriesLink {
+                title: book.title,
+                url: format!("{SITE}manga/{}", book.asin),
+                cover: Some(book.product_url),
+            })
+            .collect::<Vec<_>>();
+        // Amazon filters manga after paging the library, so a page can have
+        // no manga while there are still more books to read.
+        if !series.is_empty() || next.is_none() {
+            return Ok(Listing { series, next });
+        }
+    }
 }
 
 /// Token-authenticated requests must not forward their token through redirects

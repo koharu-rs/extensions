@@ -96,6 +96,8 @@ pub enum Catalog {
     Popular,
     /// Recently updated.
     Latest,
+    /// Books available to the signed-in account.
+    Library,
 }
 
 /// One page of a search or a catalog.
