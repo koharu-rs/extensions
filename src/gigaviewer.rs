@@ -3,10 +3,10 @@
 //! series' episodes from the list its viewer pages through, and pages,
 //! shuffled on a grid, put back as the viewer's puzzle solver does. That
 //! follows the viewer's code as read on 2026-11-23. Every site's search page
-//! lists its results alike; series list pages differ, and only Shōnen
-//! Jump+'s is read.
+//! lists its results alike; their series list pages differ in markup but
+//! hold the same cards, which `cards` reads.
 
-use std::io::Cursor;
+use std::{collections::HashSet, io::Cursor};
 
 use anyhow::{Context as _, Result, bail};
 use chrono::{Datelike as _, FixedOffset, Utc, Weekday};
@@ -30,12 +30,14 @@ pub struct GigaViewer {
     site: &'static str,
     /// Whether it has accounts, which its pages' header signs in to.
     accounts: bool,
-    /// Whether its series list groups serials by the weekday they update on,
-    /// as Shōnen Jump+'s does, which makes its latest catalog.
+    /// Whether its series list groups serials by the weekday they update on
+    /// in Shōnen Jump+'s markup, which makes its latest catalog.
     weekdays: bool,
+    /// Its series list, from its root.
+    list: &'static str,
 }
 
-/// A site that has accounts and no series list by weekday.
+/// A site that has accounts, and its series list at `series`.
 const fn site(id: &'static str, name: &'static str, site: &'static str) -> GigaViewer {
     GigaViewer {
         id,
@@ -43,6 +45,7 @@ const fn site(id: &'static str, name: &'static str, site: &'static str) -> GigaV
         site,
         accounts: true,
         weekdays: false,
+        list: "series",
     }
 }
 
@@ -75,8 +78,10 @@ pub static COMIC_ACTION: GigaViewer =
     site("comic-action", "webアクション", "https://comic-action.com/");
 pub static ZENON_PLUS: GigaViewer = site("comic-zenon", "ゼノンプラス", "https://comic-zenon.com/");
 pub static MAGCOMI: GigaViewer = site("magcomi", "マグコミ", "https://magcomi.com/");
-pub static KURAGE_BUNCH: GigaViewer =
-    site("kuragebunch", "くらげバンチ", "https://kuragebunch.com/");
+pub static KURAGE_BUNCH: GigaViewer = GigaViewer {
+    list: "series/kuragebunch",
+    ..site("kuragebunch", "くらげバンチ", "https://kuragebunch.com/")
+};
 pub static COMIC_GARDO: GigaViewer =
     site("comic-gardo", "コミックガルド", "https://comic-gardo.com/");
 pub static COMIC_EARTH_STAR: GigaViewer = site(
@@ -214,9 +219,9 @@ impl Extension for GigaViewer {
 
     fn catalogs(&self) -> &'static [Catalog] {
         if self.weekdays {
-            &[Catalog::Latest]
+            &[Catalog::Latest, Catalog::Ongoing]
         } else {
-            &[]
+            &[Catalog::Ongoing]
         }
     }
 
@@ -227,7 +232,15 @@ impl Extension for GigaViewer {
         _next: Option<&'a str>,
     ) -> BoxFuture<'a, Result<Listing>> {
         Box::pin(async move {
-            if catalog != Catalog::Latest {
+            let url = Url::parse(self.site)?.join(self.list)?;
+            if catalog == Catalog::Ongoing {
+                let page = Html::parse_document(&text(http, &url).await?);
+                return Ok(Listing {
+                    series: cards(&page),
+                    next: None,
+                });
+            }
+            if catalog != Catalog::Latest || !self.weekdays {
                 bail!("{} has no {catalog:?} catalog", self.name);
             }
             // The series list groups serials by the weekday they update on in
@@ -242,7 +255,6 @@ impl Extension for GigaViewer {
                 Weekday::Sat => "saturday",
                 Weekday::Sun => "sunday",
             };
-            let url = Url::parse(self.site)?.join("series")?;
             let page = Html::parse_document(&text(http, &url).await?);
             let item = selector(&format!(
                 "h2.series-list-date-week.{today} + ul.series-list > li.series-list-item > a"
@@ -365,6 +377,96 @@ impl Extension for GigaViewer {
             Ok(png)
         })
     }
+}
+
+/// The series cards of a series list: each a list item, or an element of
+/// class `series-item` or a `-series-item`, holding a link to one of its episodes, its
+/// thumbnail, and its title, which the sites put in a data attribute, a
+/// heading, or the thumbnail's alt text. A series listed under several
+/// weekdays is kept where it's first.
+fn cards(page: &Html) -> Vec<SeriesLink> {
+    let link = selector(r#"a[href*="/episode/"]"#);
+    let named = selector("[data-series-title], [data-series-name]");
+    let heading = selector("h2, h3, h4");
+    let image = selector("img");
+    // A card's thumbnail is in its link; a badge may come before it.
+    let linked = selector(r#"a[href*="/episode/"] img"#);
+    let mut cards = HashSet::new();
+    let mut titles = HashSet::new();
+    let mut series = Vec::new();
+    for link in page.select(&link) {
+        let Some(card) = link
+            .ancestors()
+            .filter_map(ElementRef::wrap)
+            .find(|element| {
+                element.value().name() == "li"
+                    || element
+                        .value()
+                        .classes()
+                        .any(|class| class == "series-item" || class.ends_with("-series-item"))
+            })
+        else {
+            continue;
+        };
+        if !cards.insert(card.id()) {
+            continue;
+        }
+        let thumbnail = card
+            .select(&linked)
+            .next()
+            .or_else(|| card.select(&image).next());
+        let title = card
+            .select(&named)
+            .next()
+            .and_then(|named| {
+                named
+                    .attr("data-series-title")
+                    .or_else(|| named.attr("data-series-name"))
+                    .map(str::to_owned)
+            })
+            .or_else(|| card.select(&heading).next().map(inner))
+            .or_else(|| {
+                thumbnail
+                    .and_then(|image| image.attr("alt"))
+                    .map(str::to_owned)
+            })
+            .filter(|title| !title.is_empty());
+        let (Some(title), Some(href)) = (title, link.attr("href")) else {
+            continue;
+        };
+        if !titles.insert(title.clone()) {
+            continue;
+        }
+        series.push(SeriesLink {
+            title,
+            url: href.to_owned(),
+            cover: cover(card, thumbnail),
+        });
+    }
+    series
+}
+
+/// A card's cover: its thumbnail's lazy or plain source, past spacers and
+/// inline placeholders, or else the first source of the copy a Next.js page
+/// keeps in `<noscript>`, which the parser leaves as text.
+fn cover(card: ElementRef<'_>, thumbnail: Option<ElementRef<'_>>) -> Option<String> {
+    let real = |src: &&str| src.starts_with("https://") && !src.contains("spacer");
+    if let Some(src) = thumbnail.and_then(|image| {
+        [image.attr("data-src"), image.attr("src")]
+            .into_iter()
+            .flatten()
+            .find(real)
+    }) {
+        return Some(src.to_owned());
+    }
+    let html = card.html();
+    let (_, sources) = html
+        .split_once("srcSet=\"")
+        .or_else(|| html.split_once("srcset=\""))?;
+    // An entry ends at the space before its density; its address may hold
+    // commas.
+    let first = sources.split([' ', '"']).next()?;
+    real(&first).then(|| first.to_owned())
 }
 
 /// What the episode page at `url` carries.

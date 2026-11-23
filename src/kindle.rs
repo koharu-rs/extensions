@@ -206,7 +206,9 @@ impl Extension for Kindle {
         Box::pin(async move {
             match catalog {
                 Catalog::Library => library(http, "", next).await,
-                Catalog::Popular | Catalog::Latest => bail!("Kindle JP has no public catalogs"),
+                Catalog::Popular | Catalog::Latest | Catalog::Ongoing => {
+                    bail!("Kindle JP has no public catalogs")
+                }
             }
         })
     }

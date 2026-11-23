@@ -206,7 +206,9 @@ impl Extension for PixivComic {
     ) -> BoxFuture<'a, Result<Listing>> {
         Box::pin(async move {
             match catalog {
-                Catalog::Library => bail!("pixiv Comic has no library catalog"),
+                Catalog::Library | Catalog::Ongoing => {
+                    bail!("pixiv Comic has no {catalog:?} catalog")
+                }
                 Catalog::Popular => {
                     let mut url = endpoint("rankings/popularity");
                     url.query_pairs_mut()

@@ -88,7 +88,9 @@ impl Extension for Webtoons {
         Box::pin(async move {
             let path = match catalog {
                 Catalog::Popular => "en/ranking/popular",
-                Catalog::Latest | Catalog::Library => bail!("WEBTOON has no {catalog:?} catalog"),
+                Catalog::Latest | Catalog::Library | Catalog::Ongoing => {
+                    bail!("WEBTOON has no {catalog:?} catalog")
+                }
             };
             let ranking = text(http, &Url::parse(SITE)?.join(path)?).await?;
             Ok(Listing {

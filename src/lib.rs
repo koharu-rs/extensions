@@ -114,6 +114,8 @@ pub enum Catalog {
     Latest,
     /// Books available to the signed-in account.
     Library,
+    /// Series still running, as the site lists them.
+    Ongoing,
 }
 
 /// One page of a search or a catalog.
