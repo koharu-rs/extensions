@@ -2,8 +2,9 @@
 //! publishers run: an episode's data from the JSON its page carries, a
 //! series' episodes from the list its viewer pages through, and pages,
 //! shuffled on a grid, put back as the viewer's puzzle solver does. That
-//! follows the viewer's code as read on 2026-11-23. Each site keeps its own
-//! search and series list pages, whose markup here is Shōnen Jump+'s.
+//! follows the viewer's code as read on 2026-11-23. Every site's search page
+//! lists its results alike; series list pages differ, and only Shōnen
+//! Jump+'s is read.
 
 use std::io::Cursor;
 
@@ -27,12 +28,69 @@ pub struct GigaViewer {
     name: &'static str,
     /// The site's root, ending in a slash.
     site: &'static str,
+    /// Whether it has accounts, which its pages' header signs in to.
+    accounts: bool,
+    /// Whether its series list groups serials by the weekday they update on,
+    /// as Shōnen Jump+'s does, which makes its latest catalog.
+    weekdays: bool,
+}
+
+/// A site that has accounts and no series list by weekday.
+const fn site(id: &'static str, name: &'static str, site: &'static str) -> GigaViewer {
+    GigaViewer {
+        id,
+        name,
+        site,
+        accounts: true,
+        weekdays: false,
+    }
 }
 
 pub static SHONEN_JUMP_PLUS: GigaViewer = GigaViewer {
-    id: "shonen-jump-plus",
-    name: "少年ジャンプ＋",
-    site: "https://shonenjumpplus.com/",
+    weekdays: true,
+    ..site(
+        "shonen-jump-plus",
+        "少年ジャンプ＋",
+        "https://shonenjumpplus.com/",
+    )
+};
+pub static TONARI_NO_YOUNG_JUMP: GigaViewer = GigaViewer {
+    accounts: false,
+    ..site(
+        "tonarinoyj",
+        "となりのヤングジャンプ",
+        "https://tonarinoyj.jp/",
+    )
+};
+pub static COMIC_DAYS: GigaViewer = site("comic-days", "コミックDAYS", "https://comic-days.com/");
+pub static SUNDAY_WEBRY: GigaViewer = GigaViewer {
+    accounts: false,
+    ..site(
+        "sunday-webry",
+        "サンデーうぇぶり",
+        "https://www.sunday-webry.com/",
+    )
+};
+pub static COMIC_ACTION: GigaViewer =
+    site("comic-action", "webアクション", "https://comic-action.com/");
+pub static ZENON_PLUS: GigaViewer = site("comic-zenon", "ゼノンプラス", "https://comic-zenon.com/");
+pub static MAGCOMI: GigaViewer = site("magcomi", "マグコミ", "https://magcomi.com/");
+pub static KURAGE_BUNCH: GigaViewer =
+    site("kuragebunch", "くらげバンチ", "https://kuragebunch.com/");
+pub static COMIC_GARDO: GigaViewer =
+    site("comic-gardo", "コミックガルド", "https://comic-gardo.com/");
+pub static COMIC_EARTH_STAR: GigaViewer = site(
+    "comic-earthstar",
+    "コミック アース・スター",
+    "https://comic-earthstar.com/",
+);
+pub static COMIC_TRAIL: GigaViewer = GigaViewer {
+    accounts: false,
+    ..site(
+        "comic-trail",
+        "コミックトレイル",
+        "https://comic-trail.com/",
+    )
 };
 
 /// What an episode's page carries in its `#episode-json`.
@@ -113,7 +171,7 @@ impl Extension for GigaViewer {
     /// Its front page, whose header opens the site's sign-in and sign-up
     /// dialog; it has no page of its own for them.
     fn sign_in(&self) -> Option<&'static str> {
-        Some(self.site)
+        self.accounts.then_some(self.site)
     }
 
     fn reads(&self, url: &Url) -> bool {
@@ -131,20 +189,21 @@ impl Extension for GigaViewer {
             let mut url = Url::parse(self.site)?.join("search")?;
             url.query_pairs_mut().append_pair("q", query);
             let page = Html::parse_document(&text(http, &url).await?);
-            let item = selector("ul.search-series-list > li");
-            let link = selector("a[test-thumbnail-permalink]");
-            let title = selector(".series-title");
+            // Each result's thumbnail links its first episode, and its image
+            // is named after the series; the older pages and the newer ones
+            // share only that.
+            let link = selector(r#".search-container section li a[href*="/episode/"]"#);
+            let image = selector("img");
             let series = page
-                .select(&item)
-                .filter_map(|item| {
-                    let link = item.select(&link).next()?;
+                .select(&link)
+                .filter_map(|link| {
+                    let image = link.select(&image).next()?;
                     Some(SeriesLink {
-                        title: inner(item.select(&title).next()?),
+                        title: image.attr("alt").filter(|alt| !alt.is_empty())?.to_owned(),
                         url: link.attr("href")?.to_owned(),
-                        cover: link
-                            .select(&selector("img"))
-                            .next()
-                            .and_then(|image| image.attr("src"))
+                        cover: image
+                            .attr("data-src")
+                            .or_else(|| image.attr("src"))
                             .map(str::to_owned),
                     })
                 })
@@ -154,7 +213,11 @@ impl Extension for GigaViewer {
     }
 
     fn catalogs(&self) -> &'static [Catalog] {
-        &[Catalog::Latest]
+        if self.weekdays {
+            &[Catalog::Latest]
+        } else {
+            &[]
+        }
     }
 
     fn catalog<'a>(
