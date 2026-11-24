@@ -20,7 +20,7 @@ use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 use url::Url;
 
-use crate::{Catalog, Chapter, ChapterLink, Extension, Listing, Series, SeriesLink};
+use crate::{Account, Catalog, Chapter, ChapterLink, Extension, Listing, Series, SeriesLink};
 
 const SITE: &str = "https://read.amazon.co.jp/";
 const TIMEOUT: Duration = Duration::from_secs(30);
@@ -126,7 +126,7 @@ impl Extension for Kindle {
         Some(SITE)
     }
 
-    fn account<'a>(&'a self, http: &'a Client) -> BoxFuture<'a, Result<Option<String>>> {
+    fn account<'a>(&'a self, http: &'a Client) -> BoxFuture<'a, Result<Option<Account>>> {
         Box::pin(async move {
             let response = http
                 .get(format!(
@@ -139,24 +139,9 @@ impl Extension for Kindle {
                 return Ok(None);
             }
             let _: Library = response.json().await?;
-            // Kindle's library doesn't carry the account name. Amazon's navbar
-            // configuration has the full name; its visible label is shortened.
-            let page = http
-                .get("https://www.amazon.co.jp/")
-                .send()
-                .await?
-                .error_for_status()?
-                .text()
-                .await?;
-            let name = page
-                .lines()
-                .find_map(|line| {
-                    line.trim()
-                        .strip_prefix("window.$Nav && $Nav.declare('config.customerName',")?
-                        .strip_suffix(");")
-                })
-                .context("Amazon's page has no account name")?;
-            Ok(Some(json5::from_str(name)?))
+            // The library doesn't say whose it is, and Amazon's store, which
+            // does, can answer with its robot check in place of the page.
+            Ok(Some(Account { name: None }))
         })
     }
 

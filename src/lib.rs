@@ -61,9 +61,9 @@ pub trait Extension: Send + Sync {
         None
     }
 
-    /// The name of the account signed in to its site, `None` when no one
-    /// is, as a site without a sign-in always answers.
-    fn account<'a>(&'a self, _http: &'a Client) -> BoxFuture<'a, Result<Option<String>>> {
+    /// The account signed in to its site, `None` when no one is, as a site
+    /// without a sign-in always answers.
+    fn account<'a>(&'a self, _http: &'a Client) -> BoxFuture<'a, Result<Option<Account>>> {
         Box::pin(async { Ok(None) })
     }
 
@@ -102,6 +102,14 @@ pub trait Extension: Send + Sync {
             Ok(response.bytes().await?.to_vec())
         })
     }
+}
+
+/// An account signed in to a site.
+#[derive(Clone, Debug, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct Account {
+    /// `None` when the site doesn't say it.
+    pub name: Option<String>,
 }
 
 /// A list a site has besides its search, as Mihon's catalogue sources have

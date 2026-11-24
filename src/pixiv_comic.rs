@@ -22,7 +22,7 @@ use sha2::{Digest as _, Sha256};
 use url::Url;
 
 use crate::{
-    Catalog, Chapter, ChapterLink, Extension, Listing, PageSide, ReadingDirection, Series,
+    Account, Catalog, Chapter, ChapterLink, Extension, Listing, PageSide, ReadingDirection, Series,
     SeriesLink, page, text,
 };
 
@@ -161,7 +161,7 @@ impl Extension for PixivComic {
         )
     }
 
-    fn account<'a>(&'a self, http: &'a Client) -> BoxFuture<'a, Result<Option<String>>> {
+    fn account<'a>(&'a self, http: &'a Client) -> BoxFuture<'a, Result<Option<Account>>> {
         Box::pin(async move {
             let response = api(http, endpoint("users/me")).send().await?;
             // It refuses a visitor no one signed in as.
@@ -169,7 +169,9 @@ impl Extension for PixivComic {
                 return Ok(None);
             }
             let me: Data<Me> = response.error_for_status()?.json().await?;
-            Ok(me.data.user.map(|user| user.name))
+            Ok(me.data.user.map(|user| Account {
+                name: Some(user.name),
+            }))
         })
     }
 
