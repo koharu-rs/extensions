@@ -3,6 +3,7 @@
 //! pages are there. Koharu builds every one in.
 
 mod comic_walker;
+mod e_hentai;
 mod gigaviewer;
 mod kindle;
 mod naver_webtoon;
@@ -31,6 +32,7 @@ pub static EXTENSIONS: &[&dyn Extension] = &[
     &gigaviewer::COMIC_GARDO,
     &gigaviewer::COMIC_EARTH_STAR,
     &gigaviewer::COMIC_TRAIL,
+    &e_hentai::EHentai,
     &webtoons::Webtoons,
     &naver_webtoon::NaverWebtoon,
 ];
