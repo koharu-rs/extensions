@@ -29,6 +29,7 @@ const SITES: &[(&str, &str)] = &[
     ("comic-gardo", "の"),
     ("comic-earthstar", "の"),
     ("comic-trail", "の"),
+    ("e-hentai", "love"),
 ];
 
 /// How many of a site's series to try for one with a free chapter.
